@@ -56,21 +56,46 @@ else
     print_success "No Cursor AppImage files found in home directory."
 fi
 
-# Find all cursor symlinks
-print_status "Searching for Cursor symlinks in PATH directories..."
+# Find all cursor executable files and symlinks
+print_status "Searching for Cursor executable files and symlinks in PATH directories..."
 IFS=:
 for dir in $PATH; do
-    if [ -L "$dir/cursor" ]; then
-        print_warning "Found symlink at $dir/cursor"
-        echo "  -> $(readlink -f "$dir/cursor")"
-        read -p "Do you want to remove this symlink? (y/N): " confirm
+    if [ -e "$dir/cursor" ]; then
+        print_warning "Found cursor file at $dir/cursor"
+        
+        # Check if it's a symlink
+        if [ -L "$dir/cursor" ]; then
+            echo "  -> Symlink pointing to $(readlink -f "$dir/cursor")"
+        else
+            echo "  -> Regular file (not a symlink)"
+            # Display first few lines of the file to help identify it
+            echo "  -> First 5 lines of the file:"
+            head -n 5 "$dir/cursor" | sed 's/^/     /'
+        fi
+        
+        read -p "Do you want to remove this file? (y/N): " confirm
         if [[ $confirm == [yY] || $confirm == [yY][eE][sS] ]]; then
-            sudo rm -f "$dir/cursor"
-            print_success "Removed symlink at $dir/cursor"
+            if [[ "$dir" == /usr/* ]]; then
+                sudo rm -f "$dir/cursor"
+            else
+                rm -f "$dir/cursor"
+            fi
+            print_success "Removed cursor file at $dir/cursor"
         fi
     fi
 done
 unset IFS
+
+# Check specifically for the problematic file in ~/.local/bin
+if [ -e "$HOME/.local/bin/cursor" ]; then
+    print_warning "Found the problematic cursor file at ~/.local/bin/cursor"
+    echo "This is likely causing your issue based on the error message you reported."
+    read -p "Do you want to remove this file? (y/N): " confirm
+    if [[ $confirm == [yY] || $confirm == [yY][eE][sS] ]]; then
+        rm -f "$HOME/.local/bin/cursor"
+        print_success "Removed problematic cursor file at ~/.local/bin/cursor"
+    fi
+fi
 
 # Find all desktop entries
 print_status "Searching for Cursor desktop entries..."
