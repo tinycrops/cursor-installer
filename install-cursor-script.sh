@@ -36,7 +36,16 @@ if [ ! -f "Cursor-0.46.10-7b3e0d45d4f952938dbd8e1e29c1b17003198481.deb.glibc2.25
     exit 1
 fi
 
-print_status "Beginning thorough system search for existing Cursor installations..."
+# Ask if the user wants to perform a quick installation or a thorough one
+echo "Cursor Installation Options:"
+echo "  1. Quick installation (skip thorough system search for existing installations)"
+echo "  2. Thorough installation (search and clean up existing Cursor installations, may take time)"
+echo
+read -p "Choose an option (1/2, default: 1): " install_option
+install_option=${install_option:-1}
+
+if [ "$install_option" == "2" ]; then
+    print_status "Beginning thorough system search for existing Cursor installations..."
 
 # Find all Cursor AppImages on the system (limited to common locations)
 print_status "Searching for Cursor AppImage files..."
@@ -137,6 +146,39 @@ if [ -d "$HOME/Applications/cursor" ]; then
         print_success "Removed ~/Applications/cursor directory."
     fi
 fi
+else
+    print_status "Skipping thorough system search. Performing quick installation..."
+    
+    # Check specifically for the problematic file in ~/.local/bin
+    if [ -e "$HOME/.local/bin/cursor" ]; then
+        print_warning "Found cursor file at ~/.local/bin/cursor (commonly causes issues)"
+        read -p "Do you want to remove this file? (y/N): " confirm
+        if [[ $confirm == [yY] || $confirm == [yY][eE][sS] ]]; then
+            rm -f "$HOME/.local/bin/cursor"
+            print_success "Removed cursor file at ~/.local/bin/cursor"
+        fi
+    fi
+    
+    # Check for symlink in /usr/local/bin
+    if [ -e "/usr/local/bin/cursor" ]; then
+        print_warning "Found cursor file at /usr/local/bin/cursor"
+        read -p "Do you want to remove this file? (y/N): " confirm
+        if [[ $confirm == [yY] || $confirm == [yY][eE][sS] ]]; then
+            sudo rm -f "/usr/local/bin/cursor"
+            print_success "Removed cursor file at /usr/local/bin/cursor"
+        fi
+    fi
+    
+    # Clean standard installation directory
+    if [ -d "$HOME/Applications/cursor" ]; then
+        print_warning "Found existing Cursor directory at ~/Applications/cursor"
+        read -p "Do you want to clean this directory? (y/N): " confirm
+        if [[ $confirm == [yY] || $confirm == [yY][eE][sS] ]]; then
+            rm -rf "$HOME/Applications/cursor"
+            print_success "Removed ~/Applications/cursor directory"
+        fi
+    fi
+fi
 
 # Create directories for new installation
 print_status "Creating directory for Cursor..."
@@ -158,17 +200,31 @@ print_status "Creating symlink in /usr/local/bin..."
 sudo ln -sf ~/Applications/cursor/cursor.AppImage /usr/local/bin/cursor
 print_success "Symlink created - you can now run 'cursor' from terminal"
 
-# Create desktop entry
-print_status "Creating desktop entry..."
+# Create desktop entry with sandbox disabled
+print_status "Creating desktop entry with sandbox disabled..."
 mkdir -p ~/.local/share/applications
 cat > ~/.local/share/applications/cursor.desktop << EOF
 [Desktop Entry]
 Name=Cursor
-Exec=/home/$USERNAME/Applications/cursor/cursor.AppImage
+Exec=/home/$USERNAME/Applications/cursor/cursor.AppImage --no-sandbox %F
 Type=Application
 Categories=Utility;Development;
 EOF
-print_success "Desktop entry created"
+print_success "Desktop entry created with sandbox disabled"
+
+# Create a wrapper script to automatically add the --no-sandbox flag
+print_status "Creating wrapper script to disable sandbox..."
+cat > ~/Applications/cursor/cursor-wrapper.sh << EOF
+#!/bin/bash
+exec ~/Applications/cursor/cursor.AppImage --no-sandbox "\$@"
+EOF
+chmod +x ~/Applications/cursor/cursor-wrapper.sh
+print_success "Wrapper script created"
+
+# Update the symlink to point to the wrapper script
+print_status "Updating symlink to use the wrapper script..."
+sudo ln -sf ~/Applications/cursor/cursor-wrapper.sh /usr/local/bin/cursor
+print_success "Symlink updated to use wrapper script (with --no-sandbox flag)"
 
 # Final verification
 print_status "Verifying installation..."
